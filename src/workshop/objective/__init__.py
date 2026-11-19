@@ -1,0 +1,1 @@
+"""Objectives participants can inspect."""
