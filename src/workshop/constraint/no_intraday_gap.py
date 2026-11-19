@@ -1,6 +1,13 @@
 """Tasks on one day form a single block."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pyomo.environ as pyo
+
+if TYPE_CHECKING:
+    from workshop.model import Instance
 
 
 class NoIntradayGap:
@@ -11,8 +18,24 @@ class NoIntradayGap:
     """
 
     @staticmethod
-    def add(model, instance) -> None:
-        """Attach the rule to ``model``."""
+    def add(model: pyo.ConcreteModel, instance: Instance) -> None:
+        """Attach the no-gap rule to ``model``.
+
+        On one day, the tasks one person works must form a single block on
+        the clock. Monday 00:00–04:00 together with 08:00–12:00 is a gap,
+        even though 04:00–08:00 is not offered that day. The previous task
+        abuts this one only when its ``end_hour`` equals this task's
+        ``start_hour``.
+
+        Args:
+            model: The Pyomo problem. ``model.x[person, day, shift_name]`` is
+                1 when that person works that task. The rule is added to
+                ``model.rules``.
+            instance: The fixed roster. ``persons``, ``days``, and
+                ``shifts_on(day)`` give the tasks in start-time order.
+                ``Shift.start_hour`` and ``Shift.end_hour`` decide whether
+                two tasks touch.
+        """
 
         index = [
             (person, day, shift.name)

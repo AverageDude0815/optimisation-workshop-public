@@ -1,6 +1,13 @@
 """Consistent schedule. One point when a start time matches on consecutive days."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pyomo.environ as pyo
+
+if TYPE_CHECKING:
+    from workshop.model import Instance
 
 
 class ConsistentSchedule:
@@ -11,8 +18,24 @@ class ConsistentSchedule:
     """
 
     @staticmethod
-    def add(model, instance) -> None:
-        """Attach the score to ``model``."""
+    def add(model: pyo.ConcreteModel, instance: Instance) -> None:
+        """Attach the consistent-schedule score to ``model``.
+
+        One term is worth 1 when the same start is in the same state on both
+        days of a consecutive pair: both worked, or both off. A mismatch is
+        worth 0. Starts that are not offered on both days are not terms.
+
+        Args:
+            model: The Pyomo problem. ``model.x[person, day, shift_name]`` is
+                the 0-or-1 decision for that assignment. This method does not
+                read those values. It adds symbols the solver will fill in,
+                and stores their sum on ``model.consistency_score``.
+            instance: The fixed roster. The terms come from ``persons``,
+                ``pairs``, and ``shared_shifts(today, tomorrow)``.
+
+        Returns:
+            None. ``model`` gains ``consistency_score``.
+        """
 
         terms = [
             (person, today, tomorrow, shift.name)
@@ -32,8 +55,17 @@ class ConsistentSchedule:
         )
 
     @staticmethod
-    def points(instance, assignments: tuple[tuple[str, str, str], ...]) -> float:
-        """Closed-form score for one fixed roster."""
+    def points(instance: Instance, assignments: tuple[tuple[str, str, str], ...]) -> float:
+        """Score one roster that is already chosen, without solving.
+
+        Args:
+            instance: The fixed roster. Same terms as ``add``: one per person,
+                consecutive pair, and shared start.
+            assignments: Chosen tuples ``(person, day, shift_name)``.
+
+        Returns:
+            How many of those terms match. Each match is worth 1.
+        """
 
         assigned = set(assignments)
         score = 0.0

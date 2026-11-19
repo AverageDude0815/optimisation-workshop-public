@@ -1,6 +1,13 @@
 """At least one run of days off inside the week."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pyomo.environ as pyo
+
+if TYPE_CHECKING:
+    from workshop.model import Instance
 
 
 class ConsecutiveDaysOff:
@@ -11,8 +18,22 @@ class ConsecutiveDaysOff:
     """
 
     @staticmethod
-    def add(model, instance, days_in_a_row: int) -> None:
-        """Attach the rule to ``model``."""
+    def add(model: pyo.ConcreteModel, instance: Instance, days_in_a_row: int) -> None:
+        """Attach the days-off rule to ``model``.
+
+        Each person needs one run of fully off days. A day is off when none
+        of its tasks is worked. The run sits inside the week: Sunday and
+        Monday are not a run, because the week does not wrap.
+
+        Args:
+            model: The Pyomo problem. ``model.x[person, day, shift_name]`` is
+                1 when that person works that task. The rule is added to
+                ``model.rules``.
+            instance: The fixed roster. ``persons``, ``days``, and
+                ``shifts_on(day)`` say what "working a day" means.
+            days_in_a_row: How long the off run must be. Pass 2 in this
+                workshop.
+        """
 
         if days_in_a_row < 2:
             raise ValueError("a days-off run needs at least two days")

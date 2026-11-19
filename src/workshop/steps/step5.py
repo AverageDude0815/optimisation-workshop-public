@@ -6,14 +6,23 @@ finding its maximum by hand. Change the weights so consistent schedule is above
 95% of its maximum reward and target time stays above 75%.
 """
 
+import pyomo.environ as pyo
+
 from workshop.lp import lp_maximum
 
 
 def objective_weights() -> tuple[float, float]:
     """Implement step 5. Change the weights on the LP-normalised scores.
 
+    Same role as step 4. Each score is divided by the maximum from
+    ``lp_divisors``, then multiplied by these weights. Start with both
+    weights at 1.
+
+    There are no arguments. Edit the two numbers in the marked block.
+
     Returns:
-        The consistency weight and the target-time weight.
+        ``(consistency_weight, target_time_weight)``. Stop when consistent
+        schedule is above 95% and target time is still above 75%.
     """
 
     ### CHANGE VALUES HERE ###
@@ -23,10 +32,23 @@ def objective_weights() -> tuple[float, float]:
     ### END CHANGE HERE ###
 
 
-def lp_divisors(model) -> tuple[float, float]:
+def lp_divisors(model: pyo.ConcreteModel) -> tuple[float, float]:
     """Implement step 5. LP normalisation for both objectives.
 
-    The discrete variables are already relaxed. Take one LP maximum per score.
+    Normally ``model.x`` is 0 or 1: a task is assigned or it is not. For
+    this function those decisions are already relaxed, so a person may be
+    given a fraction of a task. That is a linear program. It is not a roster
+    anyone can work. It is how you ask for the largest one score can be
+    without deriving that peak by hand.
+
+    ``lp_maximum(model, expression)`` maximises a single expression and
+    returns that maximum as a number. Call it once per score.
+
+    Args:
+        model: The relaxed Pyomo problem. ``model.consistency_score`` is the
+            consistent-schedule expression. ``model.target_score`` is the
+            target-time expression. Both are already attached. Pass each one
+            to ``lp_maximum`` on its own, not the sum of the two.
 
     Returns:
         The maximum reward of consistency and the maximum reward of target time.

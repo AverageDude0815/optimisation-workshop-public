@@ -12,7 +12,16 @@ from workshop.objective.target_time import TargetTime
 
 @dataclass(frozen=True)
 class Shift:
-    """One task: a start time and a length."""
+    """One task a person can take.
+
+    Attributes:
+        name: The label used to look the task up, such as ``"08:00"``.
+        start_hour: When it starts, as an hour from midnight. ``8`` is 08:00.
+        hours: How long it lasts. Every task in this workshop lasts 4 hours.
+        end_hour: ``start_hour + hours``. The next task abuts this one when
+            its ``start_hour`` equals this value. A later start leaves a gap,
+            even if no task is offered in between.
+    """
 
     name: str
     start_hour: int
@@ -25,10 +34,33 @@ class Shift:
 
 @dataclass(frozen=True)
 class Instance:
-    """A week of tasks for each person, and one hour target per person.
+    """The fixed roster. This is ordinary Python, not a Pyomo object.
 
-    ``shifts_by_day`` lines up with ``days``. A task is offered only on the
-    days that list it.
+    Pyomo is the library that will choose the roster. The thing it chooses
+    is stored on the model, not here. Everything on an ``Instance`` is data
+    you can read while you write the step: names, hours, and which tasks
+    exist on which day.
+
+    Attributes:
+        days: Day names from Monday through Sunday, in calendar order.
+        persons: The people who can be scheduled. This workshop has Alex and Sam.
+        shifts_by_day: One tuple of tasks per day, in the same order as
+            ``days``. A task left off a day cannot be worked that day.
+        target_hours: The hour total each person is scored against. One
+            person's target-time reward peaks when their hours equal this
+            number. The workshop uses 42.
+
+    Derived values:
+
+    - ``pairs``: consecutive days, each entry ``(today, tomorrow)``. Sunday
+      does not pair with Monday. The week does not wrap.
+    - ``shifts_on(day)``: that day's tasks, earliest start first. Each item
+      is a ``Shift``.
+    - ``shared_shifts(today, tomorrow)``: tasks offered on both days. The
+      consistent-schedule score only has a term for these starts.
+    - ``shifts``: every distinct task in the week, ordered by start time.
+      This is the catalog. A start can be in the catalog and still be
+      missing on some days, so it is the wrong list when a day matters.
     """
 
     days: tuple[str, ...]
@@ -65,7 +97,15 @@ class Instance:
                 known[shift.name] = shift
 
     def shifts_on(self, day: str) -> tuple[Shift, ...]:
-        """Tasks offered on ``day``, in start-time order."""
+        """Tasks offered on ``day``, earliest start first.
+
+        Args:
+            day: A name from ``days``, such as ``"Monday"``.
+
+        Returns:
+            The tasks that exist that day. A task that is not in this tuple
+            cannot be worked on ``day``.
+        """
 
         ordered = sorted(
             self.shifts_by_day[self.days.index(day)], key=lambda shift: shift.start_hour
@@ -73,14 +113,32 @@ class Instance:
         return tuple(ordered)
 
     def shared_shifts(self, today: str, tomorrow: str) -> tuple[Shift, ...]:
-        """Tasks offered on both days. Consistency compares these starts."""
+        """Tasks offered on both days.
+
+        The consistent-schedule score has one term per person for each of
+        these starts, and no term for a start that exists on only one of
+        the two days.
+
+        Args:
+            today: The earlier day of a consecutive pair.
+            tomorrow: The next day. Take pairs from ``pairs``. The week does
+                not wrap from Sunday back to Monday.
+
+        Returns:
+            The shared tasks, earliest start first.
+        """
 
         tomorrow_names = {shift.name for shift in self.shifts_on(tomorrow)}
         return tuple(shift for shift in self.shifts_on(today) if shift.name in tomorrow_names)
 
     @property
     def shifts(self) -> tuple[Shift, ...]:
-        """Every distinct task, ordered by start time."""
+        """Every distinct task in the week, earliest start first.
+
+        This is the catalog, not one day's offer. ``"04:00"`` is in the
+        catalog because Tuesday has it, and it is still absent on Monday.
+        Use ``shifts_on`` or ``shared_shifts`` when the day matters.
+        """
 
         by_name: dict[str, Shift] = {}
         for day_shifts in self.shifts_by_day:
@@ -90,7 +148,11 @@ class Instance:
 
     @property
     def pairs(self) -> tuple[tuple[str, str], ...]:
-        """Consecutive days. Each entry is ``(today, tomorrow)``."""
+        """Consecutive days, each entry ``(today, tomorrow)``.
+
+        Monday with Tuesday is a pair. Sunday with Monday is not. The week
+        does not wrap.
+        """
 
         return tuple(
             (self.days[index], self.days[index + 1]) for index in range(len(self.days) - 1)
@@ -139,7 +201,16 @@ WORKSHOP = Instance(
 
 
 def slots(instance: Instance) -> tuple[tuple[str, str, str], ...]:
-    """Every person, day, and shift the assignment variables cover."""
+    """Every assignment the model is allowed to make.
+
+    Args:
+        instance: The fixed roster. Only tasks returned by ``shifts_on``
+            for that day are included.
+
+    Returns:
+        Tuples ``(person, day, shift_name)``. ``model.x`` has one 0-or-1
+        decision for each of these.
+    """
 
     return tuple(
         (person, day, shift.name)
@@ -154,7 +225,27 @@ def new_model(
     *,
     fixed: dict[tuple[str, str], int] | None = None,
 ) -> pyo.ConcreteModel:
-    """Assignment variables only. Scores and rules are added separately."""
+    """Create the Pyomo problem with decisions and an empty rule list.
+
+    A ``ConcreteModel`` is one concrete optimisation problem: decisions,
+    rules, and later a score to maximise. This function only creates the
+    decisions. The step files attach the scores and the roster rules.
+
+    ``model.x[person, day, shift_name]`` is 1 when that person works that
+    task on that day, and 0 otherwise. The solver picks those values. While
+    you are still building the model, ``x`` is a symbol, not a Python number,
+    so do not read it with ``int`` or ``if``.
+
+    ``model.rules`` is the list the rules are added to. It starts empty.
+
+    Args:
+        instance: Who can work, on which days, and which tasks exist.
+        fixed: Optional forced decisions for tests, mapping
+            ``(person, day, shift_name)`` to 0 or 1.
+
+    Returns:
+        A model with ``x`` and ``rules``, and no scores yet.
+    """
 
     model = pyo.ConcreteModel()
     model.x = pyo.Var(slots(instance), domain=pyo.Binary)
