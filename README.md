@@ -14,6 +14,8 @@ Ask your agent how to get started, and what each step is there to teach.
 
 ## Commands
 
+These commands use `uv run`, which installs the dependencies the first time you run one. Install [uv](https://docs.astral.sh/uv/) if you do not have it.
+
 - `make rooster` shows every task on offer, one row per person.
 - `make step1` through `make step5` solve that step and open the roster.
 - `make test` runs the tests. A step is finished when its tests pass.
