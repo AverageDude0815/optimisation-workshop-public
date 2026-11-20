@@ -58,4 +58,9 @@ def build_model(model: pyo.ConcreteModel, instance: Instance) -> None:
     """
 
     ### ADD CODE HERE ###
+    ConsistentSchedule.add(model, instance)
+    TargetTime.add(model, instance, 42)
+    MaxHoursPerDay.add(model, instance, 8)
+    ConsecutiveDaysOff.add(model, instance, 2)
+    OnePersonPerTask.add(model, instance)
     ### END CODE HERE ###

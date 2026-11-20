@@ -42,4 +42,5 @@ def build_model(model: pyo.ConcreteModel, instance: Instance) -> None:
 
     step1.build_model(model, instance)
     ### ADD CODE HERE ###
+    NoIntradayGap.add(model, instance)
     ### END CODE HERE ###
